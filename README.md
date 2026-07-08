@@ -140,6 +140,10 @@ curl -X POST https://taap-qr.onrender.com/admin/refresh \
   -H "x-admin-key: $ADMIN_KEY" -d "<새 refresh_token>"
 ```
 
+또는 캡처 덤프에서 자동 추출+전송: `ADMIN_KEY=xxx scripts/reissue.sh`
+
+전체 로직/개념 정리는 [docs/STUDY_GUIDE.md](docs/STUDY_GUIDE.md) 참고.
+
 ## watch 앱 (Wear OS)
 
 Kotlin + Compose for Wear OS. 트리거 버튼 → 백엔드 `/qr` 호출 → `cardSerialNumber` 를
