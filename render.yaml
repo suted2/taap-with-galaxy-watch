@@ -1,0 +1,19 @@
+# Render Blueprint. 레포 연결 후 이 파일로 taap-qr 백엔드를 배포한다.
+# refresh_token 은 rotation 되므로 persistent disk 에 저장해 재시작에도 유지한다.
+services:
+  - type: web
+    name: taap-qr
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: starter          # disk 를 쓰려면 유료 플랜 필요 (free 는 disk 없음)
+    healthCheckPath: /health
+    envVars:
+      - key: TAAP_REFRESH_FILE
+        value: /data/refresh_token.txt
+      - key: TAAP_REFRESH_TOKEN   # 최초 refresh_token (부트스트랩용). 콘솔에서 입력.
+        sync: false
+    disk:
+      name: taap-data
+      mountPath: /data
+      sizeGB: 1

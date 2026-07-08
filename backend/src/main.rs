@@ -99,9 +99,28 @@ async fn qr_handler(State(st): State<Arc<AppState>>) -> Result<Json<Qr>, (Status
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let refresh_file =
+        std::env::var("TAAP_REFRESH_FILE").unwrap_or_else(|_| "taap_refresh_token.txt".into());
+
+    // 저장 경로의 부모 디렉토리 보장 (disk mount path 등)
+    if let Some(parent) = std::path::Path::new(&refresh_file).parent() {
+        if !parent.as_os_str().is_empty() {
+            std::fs::create_dir_all(parent)?;
+        }
+    }
+
+    // 최초 부트스트랩: refresh 파일이 없으면 env(TAAP_REFRESH_TOKEN)로 초기화한다.
+    // 이후 rotation 값은 파일(=persistent disk)에 저장되어 재시작에도 유지된다.
+    if !std::path::Path::new(&refresh_file).exists() {
+        if let Ok(seed) = std::env::var("TAAP_REFRESH_TOKEN") {
+            std::fs::write(&refresh_file, seed.trim())?;
+            eprintln!("[init] refresh_token 파일을 env 로 부트스트랩: {refresh_file}");
+        }
+    }
+
     let st = Arc::new(AppState {
         http: reqwest::Client::builder().user_agent("okhttp/4.9.2").build()?,
-        refresh_file: std::env::var("TAAP_REFRESH_FILE").unwrap_or_else(|_| "taap_refresh_token.txt".into()),
+        refresh_file,
         lock: Mutex::new(()),
     });
 
