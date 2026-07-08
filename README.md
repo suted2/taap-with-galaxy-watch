@@ -107,7 +107,7 @@ adb install taap.apk        # 폰에서 추출하거나 APK 직접
 - [x] **Rust 재현 성공** — refresh → id_token → QR → cardSerialNumber 획득
 - [x] refresh 체인 독립화 = **인계 방식** 채택 (앱에서 1회 로그인 → refresh_token 인계 → 앱 미사용)
 - [x] **axum 서버** (`backend/`) — 워치는 `GET /qr` 만 호출
-- [ ] Wear OS 앱 (트리거 버튼 → `/qr` 호출 → cardSerialNumber 받아 QR 렌더)
+- [x] **Wear OS 앱** (`watch/`) — 트리거 버튼 → `/qr` → cardSerialNumber → QR 렌더. 에뮬 검증 완료.
 
 > 완전 독립 세션(워치 전용 device_unique_id 로 별도 로그인)은 court-auth 로그인이 웹뷰
 > 전용 흐름(reCAPTCHA + 세션 쿠키 연쇄)이라 브라우저 재현이 까다로워 보류. 앱을 워치가
@@ -127,3 +127,23 @@ TAAP_REFRESH_FILE=/path/to/refresh_token.txt PORT=8787 cargo run
 
 refresh_token 은 rotation 되므로 매 요청마다 새 값으로 덮어써진다. **앱을 동시에 쓰면
 서로의 refresh 를 무효화**하니 워치 전용으로 둘 것.
+
+## watch 앱 (Wear OS)
+
+Kotlin + Compose for Wear OS. 트리거 버튼 → 백엔드 `/qr` 호출 → `cardSerialNumber` 를
+ZXing 으로 QR 렌더. 백엔드 주소는 `app/build.gradle.kts` 의 `BACKEND_URL`
+(에뮬→호스트 `10.0.2.2:8787`, 실기기→PC IP 로 변경).
+
+```bash
+cd watch
+JAVA_HOME=/opt/homebrew/opt/openjdk@17/libexec/openjdk.jdk/Contents/Home \
+  ./gradlew :app:assembleDebug          # AGP 8.5 는 JDK 17 필요 (26 은 못 읽음)
+adb -s <wear-serial> install app/build/outputs/apk/debug/app-debug.apk
+```
+
+Wear OS 에뮬: `avdmanager create avd -n taap_watch -k "system-images;android-34;android-wear;arm64-v8a" -d wearos_small_round`
+
+## 전체 파이프라인 (완성)
+
+워치 'QR 생성' 탭 → 백엔드 `GET /qr` → refresh → id_token → taap court QR API →
+`cardSerialNumber` → 워치가 QR 렌더. **에뮬레이터 end-to-end 검증 완료.**
