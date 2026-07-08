@@ -128,6 +128,18 @@ TAAP_REFRESH_FILE=/path/to/refresh_token.txt PORT=8787 cargo run
 refresh_token 은 rotation 되므로 매 요청마다 새 값으로 덮어써진다. **앱을 동시에 쓰면
 서로의 refresh 를 무효화**하니 워치 전용으로 둘 것.
 
+### 재인계 (앱을 써서 토큰이 어긋났을 때)
+
+taap 앱을 열어 쓰면 앱이 refresh 를 돌려 백엔드가 가진 refresh_token 이 무효화된다
+(워치 QR 이 `invalid_grant`). 이때 새 refresh_token 으로 교체:
+
+```bash
+# 1. 에뮬/앱에서 taap 로그인 → mitmproxy 로 oauth/token 응답의 refresh_token 캡처
+# 2. 재배포 없이 disk 파일 교체 (ADMIN_KEY 는 Render env 에 설정)
+curl -X POST https://taap-qr.onrender.com/admin/refresh \
+  -H "x-admin-key: $ADMIN_KEY" -d "<새 refresh_token>"
+```
+
 ## watch 앱 (Wear OS)
 
 Kotlin + Compose for Wear OS. 트리거 버튼 → 백엔드 `/qr` 호출 → `cardSerialNumber` 를

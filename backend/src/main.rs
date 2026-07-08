@@ -6,7 +6,12 @@
 //! - 앱과 refresh 체인을 공유하므로(인계 방식) 앱을 동시에 쓰면 서로 무효화된다. 워치 전용으로 쓸 것.
 //!
 //! 실행: TAAP_REFRESH_FILE=/path/refresh.txt PORT=8787 cargo run
-use axum::{extract::State, http::StatusCode, routing::get, Json, Router};
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    routing::{get, post},
+    Json, Router,
+};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -97,6 +102,31 @@ async fn qr_handler(State(st): State<Arc<AppState>>) -> Result<Json<Qr>, (Status
         .map_err(|e| (StatusCode::BAD_GATEWAY, e))
 }
 
+/// 재인계: 앱을 써서 rotation 이 어긋났을 때, 새로 캡처한 refresh_token 으로 교체한다.
+/// body = refresh_token (plain text). 인증: 헤더 x-admin-key == env ADMIN_KEY.
+/// 재배포 없이 disk 파일만 갱신하므로 즉시 반영된다.
+async fn admin_refresh(
+    State(st): State<Arc<AppState>>,
+    headers: HeaderMap,
+    body: String,
+) -> Result<&'static str, (StatusCode, String)> {
+    let key = std::env::var("ADMIN_KEY").unwrap_or_default();
+    if key.is_empty() {
+        return Err((StatusCode::FORBIDDEN, "ADMIN_KEY 미설정".into()));
+    }
+    if headers.get("x-admin-key").and_then(|v| v.to_str().ok()) != Some(key.as_str()) {
+        return Err((StatusCode::UNAUTHORIZED, "인증 실패".into()));
+    }
+    let token = body.trim();
+    if token.is_empty() {
+        return Err((StatusCode::BAD_REQUEST, "빈 토큰".into()));
+    }
+    let _g = st.lock.lock().await;
+    std::fs::write(&st.refresh_file, token)
+        .map_err(|e| (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()))?;
+    Ok("refresh_token 갱신됨")
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let refresh_file =
@@ -126,6 +156,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let app = Router::new()
         .route("/qr", get(qr_handler))
+        .route("/admin/refresh", post(admin_refresh))
         .route("/health", get(|| async { "ok" }))
         .with_state(st);
 
