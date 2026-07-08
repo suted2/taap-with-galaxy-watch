@@ -28,11 +28,39 @@ def looks_like_qr(url: str, content_type: str, body: str):
     return None
 
 
+# 정적 자산 확장자 — API 로그에서 노이즈 제거용
+_STATIC = (".js", ".css", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".ico",
+           ".woff", ".woff2", ".ttf", ".map", ".webp", ".mp4")
+
+
 def response(flow) -> None:  # flow: mitmproxy.http.HTTPFlow (런타임에 주입)
     r = flow.response
     if r is None:
         return
     ctype = r.headers.get("content-type", "")
+
+    # taap 서버로 가는 모든 API 요청을 찍는다 (정적 자산 제외) — QR 엔드포인트 찾기용
+    req = flow.request
+    host, path = req.pretty_host, req.path.split("?")[0]
+    if host.endswith("taapspace.kr") and not path.lower().endswith(_STATIC):
+        print(f"[taap] {req.method} {req.pretty_url}  -> {r.status_code} {ctype}")
+
+    # QR 발급 엔드포인트는 재현에 필요한 전체(헤더/바디/응답)를 파일로 덤프한다.
+    # 인증 토큰이 담기므로 레포 밖(scratchpad)에만 저장 — 커밋 금지.
+    if "/api/court/ac/access/qr" in path or "/api/court-auth/oauth/token" in path:
+        import os
+        out = os.environ.get("QR_DUMP", "/tmp/qr_capture.txt")
+        with open(out, "a") as f:
+            f.write("\n" + "#" * 70 + "\n")
+            f.write(f"{req.method} {req.pretty_url}\n--- request headers ---\n")
+            for k, v in req.headers.items():
+                f.write(f"{k}: {v}\n")
+            body = req.get_text(strict=False)
+            if body:
+                f.write(f"--- request body ---\n{body}\n")
+            f.write(f"--- response {r.status_code} {ctype} ---\n")
+            f.write(r.get_text(strict=False)[:4000] + "\n")
+        print(f"[QR DUMP] {req.method} {path} -> {out}")
     # 본문은 앞부분만 (base64 이미지가 수십 KB일 수 있음)
     body = r.get_text(strict=False)[:2000] if not ctype.startswith("image/") else ""
     reason = looks_like_qr(flow.request.pretty_url, ctype, body)
