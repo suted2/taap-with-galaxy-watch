@@ -14,8 +14,8 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "0.1"
-        // 워치가 호출할 백엔드. 에뮬레이터→호스트=10.0.2.2, 실기기→PC IP 로 바꿀 것.
-        buildConfigField("String", "BACKEND_URL", "\"http://10.0.2.2:8787\"")
+        // 워치가 호출할 백엔드 (Render prod). 로컬 테스트 시 http://10.0.2.2:8787 로.
+        buildConfigField("String", "BACKEND_URL", "\"https://taap-qr.onrender.com\"")
     }
     buildFeatures {
         compose = true
