@@ -86,7 +86,9 @@ adb install taap.apk        # 폰에서 추출하거나 APK 직접
 | 토큰 갱신 | `POST /api/court-auth/oauth/token` | OAuth2 (refresh → 새 access) |
 
 - **QR 은 이미지가 아니라 문자열**(`cardSerialNumber`, 예: `PNPT:...M.<ts>`). 앱이 클라이언트에서 QR 로 렌더 → 재현 측도 문자열만 받아 워치에서 그리면 됨.
-- **access token = JWT, 수명 5분.** iss `https://taapspace.kr/api/court-auth`. 계속 쓰려면 refresh 필요 → 백엔드가 토큰 갱신 담당.
+- **court API 는 `access_token` 이 아니라 `id_token` 을 Bearer 로 요구한다.** id_token 에만 `roles:[ROLE_MEMBER]` 가 있고 court API 가 그걸로 인가한다. access_token(scope/client_id 만) 을 보내면 **403**. ← 삽질 포인트.
+- **토큰 수명 5분, refresh 는 rotation**(매 갱신마다 refresh_token 새로 발급). iss `https://taapspace.kr/api/court-auth`.
+- **refresh 체인은 앱과 공유 불가.** 앱이 QR 누를 때마다 rotation 시켜서 백엔드가 가진 refresh_token 이 `invalid_grant` 로 죽는다(그 역도 성립). 검증 시엔 `adb shell am force-stop space.pnpt.fez.taap` 으로 앱을 멈추고 백엔드가 체인을 독점해야 한다. 상시 운용하려면 **워치 백엔드 전용 로그인 세션**이 필요.
 
 ## 파일
 
@@ -101,6 +103,17 @@ adb install taap.apk        # 폰에서 추출하거나 APK 직접
 - [x] 에뮬 부팅 + 시스템 CA 주입 (`emu/inject_ca.sh`, API 33) — **복호화 검증 완료**
 - [x] taap APK 폰에서 추출 + 에뮬 설치 — **루팅/에뮬 감지 없음, pinning 없음**
 - [x] QR 발급 API 캡처 → 규격 확보 (위 표)
-- [ ] 토큰 갱신(refresh) 요청 body 캡처 → 자동 갱신 구현
-- [ ] Rust 재현 (reqwest) → 워치용 HTTP 서버 (axum)
-- [ ] Wear OS 앱
+- [x] 토큰 갱신(refresh) 흐름 파악 (id_token 사용, rotation)
+- [x] **Rust 재현 성공** (`backend/`) — refresh → id_token → QR → cardSerialNumber 획득
+- [ ] refresh 체인 독립화 (워치 전용 로그인 세션) — 앱과 충돌 안 나게
+- [ ] 워치용 HTTP 서버 (axum) — 워치는 `/qr` 만 호출
+- [ ] Wear OS 앱 (트리거 버튼 → cardSerialNumber 받아 QR 렌더)
+
+## backend 실행
+
+```bash
+cd backend
+TAAP_REFRESH_FILE=/path/to/refresh_token.txt cargo run   # → stdout 에 cardSerialNumber
+```
+
+refresh_token 파일은 rotation 되므로 실행 때마다 새 값으로 덮어써진다(레포 밖에 둘 것).
