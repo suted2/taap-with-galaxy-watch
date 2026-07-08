@@ -104,16 +104,26 @@ adb install taap.apk        # 폰에서 추출하거나 APK 직접
 - [x] taap APK 폰에서 추출 + 에뮬 설치 — **루팅/에뮬 감지 없음, pinning 없음**
 - [x] QR 발급 API 캡처 → 규격 확보 (위 표)
 - [x] 토큰 갱신(refresh) 흐름 파악 (id_token 사용, rotation)
-- [x] **Rust 재현 성공** (`backend/`) — refresh → id_token → QR → cardSerialNumber 획득
-- [ ] refresh 체인 독립화 (워치 전용 로그인 세션) — 앱과 충돌 안 나게
-- [ ] 워치용 HTTP 서버 (axum) — 워치는 `/qr` 만 호출
-- [ ] Wear OS 앱 (트리거 버튼 → cardSerialNumber 받아 QR 렌더)
+- [x] **Rust 재현 성공** — refresh → id_token → QR → cardSerialNumber 획득
+- [x] refresh 체인 독립화 = **인계 방식** 채택 (앱에서 1회 로그인 → refresh_token 인계 → 앱 미사용)
+- [x] **axum 서버** (`backend/`) — 워치는 `GET /qr` 만 호출
+- [ ] Wear OS 앱 (트리거 버튼 → `/qr` 호출 → cardSerialNumber 받아 QR 렌더)
+
+> 완전 독립 세션(워치 전용 device_unique_id 로 별도 로그인)은 court-auth 로그인이 웹뷰
+> 전용 흐름(reCAPTCHA + 세션 쿠키 연쇄)이라 브라우저 재현이 까다로워 보류. 앱을 워치가
+> 대체(앱 미사용)하는 전제라면 인계 방식으로 충분하다.
 
 ## backend 실행
 
+refresh_token 확보(인계): 에뮬/앱에서 taap 로그인 후, `oauth/token` 응답의
+`refresh_token` 을 파일로 저장(레포 밖). 이후:
+
 ```bash
 cd backend
-TAAP_REFRESH_FILE=/path/to/refresh_token.txt cargo run   # → stdout 에 cardSerialNumber
+TAAP_REFRESH_FILE=/path/to/refresh_token.txt PORT=8787 cargo run
+# GET /qr     → {"userId":..., "cardSerialNumber":"PNPT:..."}
+# GET /health → ok
 ```
 
-refresh_token 파일은 rotation 되므로 실행 때마다 새 값으로 덮어써진다(레포 밖에 둘 것).
+refresh_token 은 rotation 되므로 매 요청마다 새 값으로 덮어써진다. **앱을 동시에 쓰면
+서로의 refresh 를 무효화**하니 워치 전용으로 둘 것.
